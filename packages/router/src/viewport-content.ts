@@ -1,6 +1,6 @@
 import { IContainer, Reporter } from '@aurelia/kernel';
 import { CustomElementResource, ICustomElement, ICustomElementType, INode, IRenderContext, LifecycleFlags } from '@aurelia/runtime';
-import { INavigationInstruction } from './history-browser';
+import { INavigationInstruction } from './navigator';
 import { mergeParameters } from './parser';
 import { Viewport } from './viewport';
 import { ViewportInstruction } from './viewport-instruction';

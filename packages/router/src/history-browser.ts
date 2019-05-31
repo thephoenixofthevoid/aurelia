@@ -2,7 +2,7 @@ import { Reporter } from '@aurelia/kernel';
 import { QueuedBrowserHistory } from './queued-browser-history';
 export interface IHistoryEntry {
   path: string;
-  fullStatePath: string;
+  fullStatePath?: string;
   index?: number;
   firstEntry?: boolean; // Index might change to not require first === 0, firstEntry should be reliable
   title?: string;
@@ -65,6 +65,19 @@ export class HistoryBrowser {
     this.lastHistoryMovement = null;
     this.isReplacing = false;
     this.isRefreshing = false;
+  }
+
+  public getSitePath(path: string): string {
+    const { pathname, search } = window.location;
+    const hash = `#${path}`;
+    return `${pathname}${search}${hash}`;
+  }
+
+  public pushState(state: Record<string, unknown>, title: string, path: string): void {
+    window.history.pushState(state, title, this.getSitePath(path));
+  }
+  public replaceState(state: Record<string, unknown>, title: string, path: string): void {
+    window.history.replaceState(state, title, this.getSitePath(path));
   }
 
   public activate(options?: IHistoryOptions): Promise<void> {
@@ -156,8 +169,11 @@ export class HistoryBrowser {
     return this.history.replaceState(state, null, `${pathname}${search}${hash}`);
   }
 
-  public getState(key: string): Record<string, unknown> {
+  public getState(key?: string): Record<string, unknown> {
     const state = { ...this.history.state };
+    if (key === undefined) {
+      return state;
+    }
     return state[key];
   }
 
@@ -289,7 +305,10 @@ export class HistoryBrowser {
     this.callback(this.currentEntry, navigationFlags, previousEntry);
   }
 
-  private getPath(): string {
+  public getPath(full: boolean = false): string {
+    if (full) {
+      return this.location.href;
+    }
     const hash = this.location.hash.substring(1);
     return hash.split('?')[0];
   }
