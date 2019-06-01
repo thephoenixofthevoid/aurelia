@@ -7,6 +7,7 @@ import { AnchorEventInfo, LinkHandler } from './link-handler';
 import { INavRoute, Nav } from './nav';
 import { INavigationEntry, INavigationInstruction, Navigator } from './navigator';
 import { IParsedQuery, parseQuery } from './parser';
+import { Queue, QueueItem } from './queue';
 import { RouteTable } from './route-table';
 import { Scope } from './scope';
 import { IViewportOptions, Viewport } from './viewport';
@@ -36,9 +37,8 @@ export interface IRouter {
   deactivate(): void;
 
   linkCallback(info: AnchorEventInfo): void;
-  historyCallback(instruction: INavigationInstruction): void;
 
-  processNavigations(): Promise<void>;
+  processNavigations(qInstruction: QueueItem<INavigationInstruction>): Promise<void>;
   addProcessingViewport(componentOrInstruction: string | Partial<ICustomElementType> | ViewportInstruction, viewport?: Viewport | string): void;
 
   // Called from the viewport custom element in attached()
@@ -72,7 +72,6 @@ export class Router implements IRouter {
   public navigator: Navigator;
   public navigation: BrowserNavigation;
 
-  public historyBrowser: HistoryBrowser;
   public linkHandler: LinkHandler;
   public instructionResolver: InstructionResolver;
 
@@ -84,7 +83,7 @@ export class Router implements IRouter {
   private options: IRouterOptions;
   private isActive: boolean = false;
 
-  private readonly pendingNavigations: INavigationInstruction[] = [];
+  private readonly pendingNavigations: Queue<INavigationInstruction>;
   private processingNavigation: INavigationInstruction = null;
   private lastNavigation: INavigationInstruction = null;
 
@@ -93,10 +92,10 @@ export class Router implements IRouter {
   constructor(public container: IContainer, routeTransformer: IRouteTransformer) {
     this.navigator = new Navigator();
     this.navigation = new BrowserNavigation();
-    this.historyBrowser = new HistoryBrowser();
     this.linkHandler = new LinkHandler();
     this.instructionResolver = new InstructionResolver();
 
+    this.pendingNavigations = new Queue<INavigationInstruction>(this.processNavigations);
     this.routeTransformer = routeTransformer;
   }
 
@@ -112,9 +111,6 @@ export class Router implements IRouter {
     this.isActive = true;
     this.options = {
       ...{
-        callback: (navigationInstruction) => {
-          this.historyCallback(navigationInstruction as any);
-        },
         transformFromUrl: this.routeTransformer.transformFromUrl,
         transformToUrl: this.routeTransformer.transformToUrl,
       }, ...options
@@ -127,8 +123,6 @@ export class Router implements IRouter {
     });
     this.linkHandler.activate({ callback: this.linkCallback });
     return this.navigation.activate(this.navigationCallback as any);
-    // return this.historyBrowser.activate(this.options).catch(error => { throw error; });
-    // this.navigator.goto('');
   }
 
   public deactivate(): void {
@@ -137,7 +131,6 @@ export class Router implements IRouter {
     }
     this.linkHandler.deactivate();
     this.navigator.deactivate();
-    this.historyBrowser.deactivate();
   }
 
   public linkCallback = (info: AnchorEventInfo): void => {
@@ -154,8 +147,7 @@ export class Router implements IRouter {
   }
 
   public navigatorCallback = (instruction: INavigationInstruction): void => {
-    this.pendingNavigations.push(instruction);
-    this.processNavigations().catch(error => { throw error; });
+    this.processNavigations(instruction);
   }
   public navigationCallback = (navigation: any): void => {
     console.log('navigationCallback', navigation);
@@ -165,18 +157,8 @@ export class Router implements IRouter {
     this.navigator.navigate(entry);
   }
 
-  public historyCallback(instruction: INavigationInstruction): void {
-    this.pendingNavigations.push(instruction);
-    this.processNavigations().catch(error => { throw error; });
-  }
-
-  public async processNavigations(): Promise<void> {
-    if (this.processingNavigation !== null || !this.pendingNavigations.length) {
-      return Promise.resolve();
-    }
-
-    const instruction: INavigationInstruction = this.pendingNavigations.shift();
-    this.processingNavigation = instruction;
+  public processNavigations = async (qInstruction: QueueItem<INavigationInstruction>): Promise<void> => {
+    const instruction = this.processingNavigation = qInstruction as INavigationInstruction;
 
     if (this.options.reportCallback) {
       this.options.reportCallback(instruction);
@@ -187,7 +169,7 @@ export class Router implements IRouter {
       fullStateInstruction = true;
       // tslint:disable-next-line:no-commented-code
       // if (!confirm('Perform history navigation?')) {
-      //   this.historyBrowser.cancel();
+      //   this.navigator.cancel(instruction);
       //   this.processingNavigation = null;
       //   return Promise.resolve();
       // }
@@ -209,27 +191,25 @@ export class Router implements IRouter {
         path = newPath;
       }
       views = this.instructionResolver.parseViewportInstructions(path);
-      if (!views && !views.length && !clearViewports) {
-        this.processingNavigation = null;
-        return this.processNavigations();
-      }
+      // if (!views && !views.length && !clearViewports) {
+      //   this.processingNavigation = null;
+      //   qInstruction.resolve();
+      //   return;
+      // }
     } else {
       views = instruction.instruction;
-      if (!views && !views.length) { //} && !clearViewports) {
-        this.processingNavigation = null;
-        return this.processNavigations();
-      }
+      // if (!views && !views.length) { //} && !clearViewports) {
+      //   this.processingNavigation = null;
+      //   qInstruction.resolve();
+      //   return;
+      // }
     }
 
     const parsedQuery: IParsedQuery = parseQuery(instruction.query);
     instruction.parameters = parsedQuery.parameters;
     instruction.parameterList = parsedQuery.list;
 
-    // // TODO: Fetch title (probably when done)
-    // const title = null;
-    // if (title) {
-    //   await this.historyBrowser.setEntryTitle(title);
-    // }
+    // TODO: Fetch title (probably when done)
 
     const usedViewports = (clearViewports ? this.allViewports().filter((value) => value.content.component !== null) : []);
     const defaultViewports = this.allViewports().filter((value) => value.options.default && value.content.component === null);
@@ -294,7 +274,7 @@ export class Router implements IRouter {
         return true;
       }));
       if (results.some(result => result === false)) {
-        return this.cancelNavigation([...changedViewports, ...updatedViewports], instruction);
+        return this.cancelNavigation([...changedViewports, ...updatedViewports], qInstruction);
       }
 
       for (const viewport of changedViewports) {
@@ -326,7 +306,6 @@ export class Router implements IRouter {
     //   await this.historyBrowser.pop();
     // }
 
-    this.navigator.finalize(instruction);
     updatedViewports.forEach((viewport) => {
       viewport.finalizeContentChange();
     });
@@ -335,8 +314,7 @@ export class Router implements IRouter {
       this.lastNavigation.repeating = false;
     }
     this.processingNavigation = null;
-
-    this.processNavigations().catch(error => { throw error; });
+    this.navigator.finalize(instruction);
   }
 
   public addProcessingViewport(componentOrInstruction: string | Partial<ICustomElementType> | ViewportInstruction, viewport?: Viewport | string): void {
@@ -355,9 +333,8 @@ export class Router implements IRouter {
         this.addedViewports.push(new ViewportInstruction(componentOrInstruction, viewport));
       }
     } else if (this.lastNavigation) {
-      this.pendingNavigations.unshift({ instruction: '', fullStateInstruction: '', repeating: true, navigation: {} });
+      this.pendingNavigations.enqueue({ instruction: '', fullStateInstruction: '', repeating: true, navigation: {} });
       // Don't wait for the (possibly slow) navigation
-      this.processNavigations().catch(error => { throw error; });
     }
   }
 
@@ -409,17 +386,11 @@ export class Router implements IRouter {
       fromBrowser: false,
     };
     if (typeof pathOrViewports === 'string') {
-      const [ path, search ] = pathOrViewports.split('?');
+      const [path, search] = pathOrViewports.split('?');
       entry.instruction = path;
       entry.query = search;
     }
     return this.navigator.navigate(entry);
-    // if (typeof pathOrViewports === 'string') {
-    //   return this.navigator.goto(pathOrViewports, title, data);
-    // }
-    // // else {
-    // //   this.view(pathOrViewports, title, data);
-    // // }
   }
 
   public replace(pathOrViewports: string | Record<string, Viewport>, title?: string, data?: Record<string, unknown>): Promise<void> {
@@ -457,19 +428,19 @@ export class Router implements IRouter {
     return this.navs[name];
   }
 
-  private async cancelNavigation(updatedViewports: Viewport[], instruction: INavigationInstruction): Promise<void> {
+  private async cancelNavigation(updatedViewports: Viewport[], qInstruction: QueueItem<INavigationInstruction>): Promise<void> {
     // TODO: Take care of disabling viewports when cancelling and stateful!
     updatedViewports.forEach((viewport) => {
       viewport.abortContentChange().catch(error => { throw error; });
     });
-    await this.navigator.cancel(instruction);
+    await this.navigator.cancel(qInstruction as INavigationInstruction);
     // if (instruction.navigation.new) {
     //   await this.historyBrowser.pop();
     // } else {
     //   await this.historyBrowser.cancel();
     // }
     this.processingNavigation = null;
-    this.processNavigations().catch(error => { throw error; });
+    qInstruction.reject();
   }
 
   private ensureRootScope(): void {
@@ -525,9 +496,5 @@ export class Router implements IRouter {
     instruction.path = state + query;
     instruction.fullStateInstruction = this.instructionResolver.stateStringsToString(fullViewportStates, true) + query;
     return Promise.resolve();
-    // return this.historyBrowser.replacePath(
-    //   state + query,
-    //   this.instructionResolver.stateStringsToString(fullViewportStates, true) + query,
-    //   instruction as any);
   }
 }

@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import { DebugConfiguration } from '../../../debug/src/index';
 import { BasicConfiguration } from '../../../jit-html-browser/src/index';
 import { Aurelia, CustomElementResource } from '../../../runtime/src/index';
-import { Router, ViewportCustomElement } from '../../src/index';
+import { Router, ViewportCustomElement, RouterConfiguration } from '../../src/index';
 import { MockBrowserHistoryLocation } from '../mock/browser-history-location.mock';
 import { ViewportInstruction } from './../../src/viewport-instruction';
 
@@ -79,19 +79,19 @@ const setup = async (): Promise<{ au; container; host; router }> => {
   container.register(Router as any);
   container.register(ViewportCustomElement as any);
 
-  const router = container.get(Router);
-  const mockBrowserHistoryLocation = new MockBrowserHistoryLocation();
-  mockBrowserHistoryLocation.changeCallback = router.historyBrowser.pathChanged;
-  router.historyBrowser.history = mockBrowserHistoryLocation as any;
-  router.historyBrowser.location = mockBrowserHistoryLocation as any;
-
   const host = document.createElement('div');
   document.body.appendChild(host as any);
 
   const au = window['au'] = new Aurelia(container)
-    .register(DebugConfiguration)
+    .register(DebugConfiguration, RouterConfiguration)
     .app({ host: host, component: App })
     .start();
+
+  const router = container.get(Router);
+  const mockBrowserHistoryLocation = new MockBrowserHistoryLocation();
+  mockBrowserHistoryLocation.changeCallback = router.navigation.handlePopstate as any;
+  router.navigation.history = mockBrowserHistoryLocation as any;
+  router.navigation.location = mockBrowserHistoryLocation as any;
 
   await router.activate();
   return { au, container, host, router };
