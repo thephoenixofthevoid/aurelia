@@ -1,11 +1,10 @@
 import { DI, IContainer, InjectArray, Reporter } from '@aurelia/kernel';
 import { Aurelia, ICustomElementType, IRenderContext } from '@aurelia/runtime';
 import { BrowserNavigation } from './browser-navigation';
-import { HistoryBrowser, IHistoryOptions } from './history-browser';
 import { InstructionResolver, IRouteSeparators } from './instruction-resolver';
 import { AnchorEventInfo, LinkHandler } from './link-handler';
 import { INavRoute, Nav } from './nav';
-import { INavigationEntry, INavigationInstruction, Navigator } from './navigator';
+import { INavigationEntry, INavigationInstruction, INavigatorOptions, Navigator } from './navigator';
 import { IParsedQuery, parseQuery } from './parser';
 import { Queue, QueueItem } from './queue';
 import { RouteTable } from './route-table';
@@ -20,7 +19,7 @@ export interface IRouteTransformer {
 
 export const IRouteTransformer = DI.createInterface<IRouteTransformer>('IRouteTransformer').withDefault(x => x.singleton(RouteTable));
 
-export interface IRouterOptions extends IHistoryOptions, IRouteTransformer {
+export interface IRouterOptions extends INavigatorOptions, IRouteTransformer {
   separators?: IRouteSeparators;
   reportCallback?(instruction: INavigationInstruction): void;
 }
