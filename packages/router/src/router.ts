@@ -147,10 +147,11 @@ export class Router implements IRouter {
   }
 
   public navigatorCallback = (instruction: INavigationInstruction): void => {
+    // console.log('navigatorCallback', instruction);
     this.processNavigations(instruction);
   }
   public navigationCallback = (navigation: any): void => {
-    console.log('navigationCallback', navigation);
+    // console.log('navigationCallback', navigation);
     const entry: INavigationEntry = (navigation.state && navigation.state.NavigationEntry ? navigation.state.NavigationEntry : {});
     entry.instruction = navigation.instruction;
     entry.fromBrowser = true;
@@ -301,10 +302,9 @@ export class Router implements IRouter {
     await this.replacePaths(instruction);
 
     // Remove history entry if no history viewports updated
-    // TODO: FIX THIS WITH NAVIGATOR
-    // if (!instruction.navigation.first && !instruction.repeating && updatedViewports.every(viewport => viewport.options.noHistory)) {
-    //   await this.historyBrowser.pop();
-    // }
+    if (instruction.navigation.new && !instruction.navigation.first && !instruction.repeating && updatedViewports.every(viewport => viewport.options.noHistory)) {
+      instruction.untracked = true;
+    }
 
     updatedViewports.forEach((viewport) => {
       viewport.finalizeContentChange();
@@ -434,11 +434,6 @@ export class Router implements IRouter {
       viewport.abortContentChange().catch(error => { throw error; });
     });
     await this.navigator.cancel(qInstruction as INavigationInstruction);
-    // if (instruction.navigation.new) {
-    //   await this.historyBrowser.pop();
-    // } else {
-    //   await this.historyBrowser.cancel();
-    // }
     this.processingNavigation = null;
     qInstruction.reject();
   }
