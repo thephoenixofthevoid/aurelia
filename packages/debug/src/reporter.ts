@@ -228,7 +228,7 @@ const codeLookup: Record<string, IMessageInfo> = {
   },
   2003: {
     type: MessageType.error,
-    message: 'Queued browser history has already been activated.'
+    message: 'Browser navigation has already been activated.'
   },
   2004: {
     type: MessageType.error,

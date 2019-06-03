@@ -130,6 +130,7 @@ export class Router implements IRouter {
     }
     this.linkHandler.deactivate();
     this.navigator.deactivate();
+    this.navigation.deactivate();
   }
 
   public linkCallback = (info: AnchorEventInfo): void => {
