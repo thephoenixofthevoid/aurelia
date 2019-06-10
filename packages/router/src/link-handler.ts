@@ -114,7 +114,7 @@ export class LinkHandler {
    */
   public activate(options: ILinkHandlerOptions): void {
     if (this.isActive) {
-      throw Reporter.error(2004);
+      throw new Error('Link handler has already been activated');
     }
 
     this.isActive = true;
@@ -127,6 +127,9 @@ export class LinkHandler {
    * Deactivate the instance. Event handlers and other resources should be cleaned up here.
    */
   public deactivate(): void {
+    if (!this.isActive) {
+      throw new Error('Link handler has not been activated');
+    }
     this.document.removeEventListener('click', this.handler, true);
     this.isActive = false;
   }
